@@ -3,7 +3,7 @@ from torch import nn
 
 
 class MLP(nn.Module):
-    def __init__(self, input_dim, output_dim, dropout=0.4, act=nn.ReLU):
+    def __init__(self, input_dim, output_dim, dropout=0.4, act=nn.ReLU()):
         super().__init__()
         self.dropout = nn.Dropout(dropout)
         self.act = act
@@ -32,11 +32,11 @@ class CrossCompressUnit(nn.Module):
         v = v.unsqueeze(2)
         e = e.unsqueeze(1)
 
-        c_matrix = torch.mm(v, e)
-        c_matrix_transpose = c_matrix.T
+        c_matrix = torch.bmm(v, e)
+        c_matrix_transpose = c_matrix.transpose(2, 1)
 
         c_matrix = c_matrix.view(-1, self.dim)
-        c_matrix_transpose = c_matrix_transpose.view(-1, self.dim)
+        c_matrix_transpose = c_matrix_transpose.reshape(-1, self.dim)
 
         v_output = self.vv(c_matrix) + self.ev(c_matrix_transpose)
         e_output = self.ve(c_matrix) + self.ee(c_matrix_transpose)
@@ -49,7 +49,7 @@ class CrossCompressUnit(nn.Module):
 class MRK(nn.Module):
     def __init__(self, dim, user_num, item_num, relation_num, so_num, low_layer_num, high_layer_num):
         super().__init__()
-
+        self.dim = dim
         self.user_embedding = nn.Embedding(user_num, dim)
         self.item_embedding = nn.Embedding(item_num, dim)
         self.relation_embedding = nn.Embedding(relation_num, dim)
@@ -82,8 +82,8 @@ class MRK(nn.Module):
             scores = (user_embedding * item_embeddings).sum(1)
             score_normalized = torch.sigmoid(scores)
             if labels is not None:
-                ce_loss_fn = nn.CrossEntropyLoss()
-                rs_loss = ce_loss_fn(scores, labels)
+                ce_loss_fn = nn.BCEWithLogitsLoss()
+                rs_loss = ce_loss_fn(scores, labels.to(torch.float))
                 rs_l2_loss = (user_embedding ** 2).sum() / 2 + (item_embedding ** 2).sum() / 2
                 for w in self.user_mlp.get_weights() + self.cc_unit.get_weights():
                     rs_l2_loss += (w ** 2).sum() / 2

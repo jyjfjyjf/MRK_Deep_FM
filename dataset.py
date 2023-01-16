@@ -8,12 +8,20 @@ class KGDataset(Dataset, ABC):
     def __init__(self, ):
         id2entity_path = 'data/movie/item_index2entity_id.txt'
         kg_path = 'data/movie/kg.txt'
+        ratings_path = 'data/movie/ratings.dat'
 
         with open(id2entity_path, 'r', encoding='utf-8') as f:
             entity_id2index = f.readlines()
         self.entity_id2index = {fi.strip().split('\t')[0]: fi.strip().split('\t')[1] for fi in entity_id2index}
         with open(kg_path, 'r', encoding='utf-8') as f:
             kg = f.readlines()
+
+        with open(ratings_path, 'r', encoding='utf-8') as f:
+            ratings = f.readlines()
+
+        for rating in ratings:
+            if rating.split('::')[1] not in self.entity_id2index.keys():
+                self.entity_id2index[rating.split('::')[1]] = len(entity_id2index) + 1
 
         relation_set = set()
         for kg_ in kg:
@@ -24,17 +32,26 @@ class KGDataset(Dataset, ABC):
 
         self.kg = []  # (电影 id, 关系 id, 客体 id)
         self.object = set()
-        for kg_ in tqdm(kg, desc='KGDataset'):
+        for kg_ in tqdm(kg, desc='RatDataset'):
             kg_ = kg_.strip()
             kg_ = kg_.split('\t')
-            entity_id = kg_[0]
-            relation_id = self.relation2id[kg_[1]]
-            object_id = kg_[1]
+
+            subject_id = kg_[0]
+            object_id = kg_[2]
+            self.object.add(subject_id)
             self.object.add(object_id)
+
+        self.object = list(set(list(self.entity_id2index.keys()) + list(self.object)))
+        self.so2id = {v: i for i, v in enumerate(self.object)}
+        for kg_ in kg:
+            kg_ = kg_.strip()
+            kg_ = kg_.split('\t')
+            entity_id = self.so2id[kg_[0]]
+            relation_id = self.relation2id[kg_[1]]
+            object_id = self.so2id[kg_[2]]
             self.kg.append((
                 entity_id, relation_id, object_id
             ))
-        self.object = list(self.object)
         self.length = len(self.kg)
 
     def __len__(self):
@@ -71,6 +88,10 @@ class RatDataset(Dataset, ABC):
         with open(ratings_path, 'r', encoding='utf-8') as f:
             ratings = f.readlines()
 
+        for rating in ratings:
+            if rating.split('::')[1] not in self.entity_id2index.keys():
+                self.entity_id2index[rating.split('::')[1]] = len(entity_id2index) + 1
+
         relation_set = set()
         for kg_ in kg:
             kg_ = kg_.strip()
@@ -83,15 +104,17 @@ class RatDataset(Dataset, ABC):
         for kg_ in tqdm(kg, desc='RatDataset'):
             kg_ = kg_.strip()
             kg_ = kg_.split('\t')
+            subject_id = kg_[0]
             object_id = kg_[2]
+            self.object.add(subject_id)
             self.object.add(object_id)
 
-        self.object = list(self.object)
-        self.so2id = {v: i for i, v in enumerate(list(self.entity_id2index.keys()) + self.object)}
+        self.object = list(set(list(self.entity_id2index.keys()) + list(self.object)))
+        self.so2id = {v: i for i, v in enumerate(self.object)}
         for kg_ in kg:
             kg_ = kg_.strip()
             kg_ = kg_.split('\t')
-            entity_id = kg_[0]
+            entity_id = self.so2id[kg_[0]]
             relation_id = self.relation2id[kg_[1]]
             object_id = self.so2id[kg_[2]]
             self.kg.append((
@@ -110,7 +133,7 @@ class RatDataset(Dataset, ABC):
             rating = rating.strip()
             rating = rating.split('::')
             user = rating[0]
-            entity_id = rating[1]
+            entity_id = self.so2id[rating[1]]
             score = int(rating[2])
             self.ratings.append((
                 self.user2id[user],
