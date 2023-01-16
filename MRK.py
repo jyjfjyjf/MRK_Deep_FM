@@ -54,37 +54,70 @@ class MRK(nn.Module):
         self.item_embedding = nn.Embedding(item_num, dim)
         self.relation_embedding = nn.Embedding(relation_num, dim)
         self.so_embedding = nn.Embedding(so_num, dim)
-        self.high_layer_num = high_layer_num
 
-        self.low_layer = LowLayer(dim, low_layer_num)
+        self.user_mlp = MLP(dim, dim)
+        self.tail_mlp = MLP(dim, dim)
+        self.cc_unit = CrossCompressUnit(dim)
+        self.layer_num = low_layer_num
 
-    def forward(self, user_ids, item_ids, relation_ids, s_ids, o_ids, flag):
-        user_embedding = self.user_embedding(user_ids)
+        self.layer_num = high_layer_num
+        self.kg_mlp = MLP(2 * dim, 2 * dim)
+        self.kg_pred_mlp = MLP(2 * dim, dim)
+
+    def forward(self,
+                user_ids=None,
+                item_ids=None,
+                relation_ids=None,
+                s_ids=None,
+                o_ids=None,
+                flag=True,
+                labels=None):
         item_embedding = self.item_embedding(item_ids)
-        relation_embedding = self.relation_embedding(relation_ids)
         head_embedding = self.so_embedding(s_ids)
-        tail_embedding = self.so_embedding(o_ids)
+        item_embeddings, head_embeddings = self.cc_unit(item_embedding, head_embedding)
 
-        user_embedding, item_embedding, tail_embedding = self.low_layer(
-            user_embedding, item_embedding, head_embedding, tail_embedding
-        )
+        if flag:
+            user_embedding = self.user_embedding(user_ids)
+            user_embedding = self.user_mlp(user_embedding)
+            scores = (user_embedding * item_embeddings).sum(1)
+            score_normalized = torch.sigmoid(scores)
+            if labels is not None:
+                ce_loss_fn = nn.CrossEntropyLoss()
+                rs_loss = ce_loss_fn(scores, labels)
+                rs_l2_loss = (user_embedding ** 2).sum() / 2 + (item_embedding ** 2).sum() / 2
+                for w in self.user_mlp.get_weights() + self.cc_unit.get_weights():
+                    rs_l2_loss += (w ** 2).sum() / 2
 
-        scores = (user_embedding * item_embedding).sum(1)
-        sigmoid = nn.Sigmoid()
-        scores_normalized = sigmoid(scores)
+                return scores, score_normalized, rs_l2_loss * 1e-6 + rs_loss
+        else:
+            relation_embedding = self.relation_embedding(relation_ids)
+            tail_embedding = self.so_embedding(o_ids)
+            tail_embedding = self.tail_mlp(tail_embedding)
+            head_relation_concat = torch.cat([head_embeddings, relation_embedding], dim=1)
+            head_relation_concat = self.kg_mlp(head_relation_concat)
+            tail_pred = self.kg_pred_mlp(head_relation_concat)
+            tail_pred = torch.sigmoid(tail_pred)
+            score_kg = torch.sigmoid((tail_embedding * tail_pred).sum(1))
+            rmse = torch.sqrt(
+                ((tail_embedding - tail_pred) ** 2).sum(1) / self.dim
+            ).mean()
+            kg_loss = -score_kg
+            kg_l2_loss = (head_embedding ** 2).sum() / 2 + (tail_embedding ** 2).sum() / 2
+            for w in self.tail_mlp.get_weights() + self.cc_unit.get_weights() + self.kg_mlp.get_weights() + self.kg_pred_mlp.get_weights():
+                kg_l2_loss += (w ** 2).sum() / 2
 
-
-        for _ in range(self.high_layer_num):
+            return kg_loss + kg_l2_loss
 
 
 class HighLayer(nn.Module):
     def __init__(self, dim, layer_num):
         super().__init__()
+        self.dim = dim
         self.layer_num = layer_num
         self.kg_mlp = MLP(2 * dim, 2 * dim)
         self.kg_pred_mlp = MLP(2 * dim, dim)
 
-    def forward(self, head_embedding, relation_embedding):
+    def forward(self, head_embedding, relation_embedding, tail_embedding):
         head_relation_concat = torch.cat([head_embedding, relation_embedding], dim=1)
 
         kg_mlp_weight = []
@@ -97,6 +130,15 @@ class HighLayer(nn.Module):
         sigmoid = nn.Sigmoid()
         tail_pred = sigmoid(tail_pred)
 
+        score_kg = sigmoid((tail_embedding * tail_pred).sum(1))
+        rmse_loss = torch.sqrt(
+            ((tail_embedding - tail_pred) ** 2).sum(1) / self.dim
+        ).mean()
+
+        return score_kg, rmse_loss
+
+    def get_weights(self):
+        return self.kg_mlp.get_weights() + self.kg_pred_mlp.get_weights()
 
 
 class LowLayer(nn.Module):
@@ -115,8 +157,11 @@ class LowLayer(nn.Module):
 
         return user_embedding, item_embedding, tail_embedding
 
-    def get_weights(self):
-        return self.user_mlp.get_weights() + self.tail_mlp.get_weights() + self.cc_unit.get_weights()
+    def get_rs_weights(self):
+        return self.user_mlp.get_weights() + self.cc_unit.get_weights()
+
+    def get_kg_weights(self):
+        return self.tail_mlp.get_weights() + self.cc_unit.get_weights()
 
 
 
