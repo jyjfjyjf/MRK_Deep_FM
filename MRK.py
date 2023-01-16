@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 
+from transformers.models.bert.modeling_bert import BertModel
 
 class MLP(nn.Module):
     def __init__(self, input_dim, output_dim, dropout=0.4, act=nn.ReLU()):
@@ -64,6 +65,21 @@ class MRK(nn.Module):
         self.kg_mlp = MLP(2 * dim, 2 * dim)
         self.kg_pred_mlp = MLP(2 * dim, dim)
 
+        self.apply(self.init_weight)
+
+    def init_weight(self, module):
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=0.02)
+            if module.bias is not None:
+                module.bias.data.zero_()
+            elif isinstance(module, nn.Embedding):
+                module.weight.data.normal_(mean=0.0, std=0.02)
+                if module.padding_idx is not None:
+                    module.weight.data[module.padding_idx].zero_()
+                elif isinstance(module, nn.LayerNorm):
+                    module.bias.data.zero_()
+                    module.weight.data.fill_(1.0)
+
     def forward(self,
                 user_ids=None,
                 item_ids=None,
@@ -106,7 +122,7 @@ class MRK(nn.Module):
             for w in self.tail_mlp.get_weights() + self.cc_unit.get_weights() + self.kg_mlp.get_weights() + self.kg_pred_mlp.get_weights():
                 kg_l2_loss += (w ** 2).sum() / 2
 
-            return kg_loss + kg_l2_loss
+            return kg_loss + kg_l2_loss * 1e-6
 
 
 class HighLayer(nn.Module):

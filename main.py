@@ -77,7 +77,7 @@ def train():
     kg_optimizer = Adam(model.parameters(), lr=kg_lr, weight_decay=1e-6)
 
     for epoch in range(1, Epoch + 1):
-        for batch in tqdm(train_dataloader, desc=f'[{epoch:2d}/{Epoch:2d}] training rs'):
+        for batch in tqdm(train_dataloader, desc=f'[{epoch:02d}/{Epoch:02d}] training rs'):
             model.train()
             user_ids = batch['user_id']
             entity_id = batch['entity_id']
@@ -96,7 +96,7 @@ def train():
             rs_optimizer.zero_grad()
 
         if epoch % 3 == 0:
-            for batch in tqdm(kg_dataloader, desc=f'[{epoch:2d}/{Epoch:2d}] training kg'):
+            for batch in tqdm(kg_dataloader, desc=f'[{epoch:02d}/{Epoch:02d}] training kg'):
                 model.train()
                 entity_id = batch['entity_id']
                 relation_ids = batch['relation_id']
@@ -109,8 +109,8 @@ def train():
                     o_ids=object_id.to(device),
                     flag=False
                 )
-                loss = output[0]
-                loss.backward()
+                loss = output
+                loss.sum().backward()
 
                 kg_optimizer.step()
                 kg_optimizer.zero_grad()
