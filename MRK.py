@@ -4,7 +4,7 @@ from torch import nn
 from transformers.models.bert.modeling_bert import BertModel
 
 class MLP(nn.Module):
-    def __init__(self, input_dim, output_dim, dropout=0.4, act=nn.ReLU()):
+    def __init__(self, input_dim, output_dim, dropout=0.2, act=nn.ReLU()):
         super().__init__()
         self.dropout = nn.Dropout(dropout)
         self.act = act
@@ -69,16 +69,11 @@ class MRK(nn.Module):
 
     def init_weight(self, module):
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=0.02)
+            nn.init.xavier_normal_(module.weight)
             if module.bias is not None:
                 module.bias.data.zero_()
-            elif isinstance(module, nn.Embedding):
-                module.weight.data.normal_(mean=0.0, std=0.02)
-                if module.padding_idx is not None:
-                    module.weight.data[module.padding_idx].zero_()
-                elif isinstance(module, nn.LayerNorm):
-                    module.bias.data.zero_()
-                    module.weight.data.fill_(1.0)
+        elif isinstance(module, nn.Embedding):
+            nn.init.xavier_normal_(module.weight)
 
     def forward(self,
                 user_ids=None,
@@ -98,8 +93,8 @@ class MRK(nn.Module):
             scores = (user_embedding * item_embeddings).sum(1)
             score_normalized = torch.sigmoid(scores)
             if labels is not None:
-                ce_loss_fn = nn.BCEWithLogitsLoss()
-                rs_loss = ce_loss_fn(scores, labels.to(torch.float))
+                ce_loss_fn = nn.MultiLabelSoftMarginLoss()
+                rs_loss = ce_loss_fn(scores.view(-1, 1), labels.to(torch.float).view(-1, 1))
                 rs_l2_loss = (user_embedding ** 2).sum() / 2 + (item_embedding ** 2).sum() / 2
                 for w in self.user_mlp.get_weights() + self.cc_unit.get_weights():
                     rs_l2_loss += (w ** 2).sum() / 2

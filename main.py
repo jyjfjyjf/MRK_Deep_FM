@@ -77,50 +77,67 @@ def train():
     kg_optimizer = Adam(model.parameters(), lr=kg_lr, weight_decay=1e-6)
 
     for epoch in range(1, Epoch + 1):
-        for batch in tqdm(train_dataloader, desc=f'[{epoch:02d}/{Epoch:02d}] training rs'):
-            model.train()
-            user_ids = batch['user_id']
-            entity_id = batch['entity_id']
-            score = batch['score']
-
-            output = model(
-                user_ids=user_ids.to(device),
-                item_ids=entity_id.to(device),
-                labels=score.to(device),
-                s_ids=entity_id.to(device),
-            )
-            loss = output[2]
-            loss.backward()
-
-            rs_optimizer.step()
-            rs_optimizer.zero_grad()
-
-        if epoch % 3 == 0:
-            for batch in tqdm(kg_dataloader, desc=f'[{epoch:02d}/{Epoch:02d}] training kg'):
+        with tqdm(iterable=train_dataloader, desc=f'[{epoch:02d}/{Epoch:02d}] training rs',
+                  unit_scale=True) as pbar:
+            total_loss = 0
+            step = 0
+            for batch in pbar:
                 model.train()
+                step += 1
+                user_ids = batch['user_id']
                 entity_id = batch['entity_id']
-                relation_ids = batch['relation_id']
-                object_id = batch['object_id']
+                score = batch['score']
 
                 output = model(
-                    relation_ids=relation_ids.to(device),
+                    user_ids=user_ids.to(device),
                     item_ids=entity_id.to(device),
+                    labels=score.to(device),
                     s_ids=entity_id.to(device),
-                    o_ids=object_id.to(device),
-                    flag=False
                 )
-                loss = output
-                loss.sum().backward()
+                loss = output[2]
+                loss.backward()
 
-                kg_optimizer.step()
-                kg_optimizer.zero_grad()
+                total_loss += loss.item()
+
+                pbar.set_postfix({'loss': f'{total_loss / step:.5f}'})
+
+                rs_optimizer.step()
+                rs_optimizer.zero_grad()
+
+        if epoch % 3 == 0:
+            with tqdm(iterable=kg_dataloader, desc=f'[{epoch:02d}/{Epoch:02d}] training kg',
+                      unit_scale=True) as pbar:
+                total_loss = 0
+                step = 0
+                for batch in pbar:
+                    step += 1
+                    model.train()
+                    entity_id = batch['entity_id']
+                    relation_ids = batch['relation_id']
+                    object_id = batch['object_id']
+
+                    output = model(
+                        relation_ids=relation_ids.to(device),
+                        item_ids=entity_id.to(device),
+                        s_ids=entity_id.to(device),
+                        o_ids=object_id.to(device),
+                        flag=False
+                    )
+                    loss = output
+                    loss.sum().backward()
+                    total_loss += loss.sum().item()
+
+                    pbar.set_postfix({'loss': f'{total_loss / step:.5f}'})
+
+                    kg_optimizer.step()
+                    kg_optimizer.zero_grad()
 
         with torch.no_grad():
             model.eval()
             pred_list = []
             pred_normalized_list = []
             label_list = []
-            for batch in tqdm(test_dataloader, desc=f'[{epoch:2d}/{Epoch:2d}] evaluate rs'):
+            for batch in tqdm(test_dataloader, desc=f'[{epoch:02d}/{Epoch:02d}] evaluate rs'):
                 user_ids = batch['user_id']
                 entity_id = batch['entity_id']
                 score = batch['score']
