@@ -1,9 +1,9 @@
 from data_loader import load_data
 from dataset import RatDataset, KGDataset
 import torch
-from torch.utils.data import Subset, DataLoader
+from torch.utils.data import DataLoader
 import random
-from torch.optim import Adam
+from torch.optim import AdamW
 from MRK import MRK
 from tqdm import tqdm
 from sklearn.metrics import roc_auc_score
@@ -11,13 +11,13 @@ import numpy as np
 
 
 def train():
-    Epoch = 20
+    Epoch = 100
     batch_size = 4096
     dim = 8
     low_layer_nums = 1
     high_layer_nums = 1
-    kg_lr = 0.01
-    rs_lr = 0.02
+    kg_lr = 0.002
+    rs_lr = 0.004
     device = 'cuda'
 
     data = load_data()
@@ -71,8 +71,8 @@ def train():
         high_layer_num=high_layer_nums
     )
     model.to(device)
-    rs_optimizer = Adam(model.parameters(), lr=rs_lr)
-    kg_optimizer = Adam(model.parameters(), lr=kg_lr)
+    rs_optimizer = AdamW(model.parameters(), lr=rs_lr)
+    kg_optimizer = AdamW(model.parameters(), lr=kg_lr)
 
     for epoch in range(1, Epoch + 1):
         pred_list = []
@@ -191,9 +191,9 @@ def train():
         predictions = [1 if i >= 0.5 else 0 for i in pred_list]
         test_acc = np.mean(np.equal(predictions, label_list))
 
-        print(f'train_auc: {train_auc:.4f}\ttrain acc: {train_acc:.4f}\t'
-              f'eval_auc: {eval_auc:.4f}\teval_auc acc: {eval_acc:.4f}\t'
-              f'test_auc: {test_auc:.4f}\ttest_auc acc: {test_acc:.4f}')
+        print(f'train auc: {round(train_auc, 3)}\ttrain acc: {train_acc:.3f}\t'
+              f'eval auc: {round(eval_auc, 3)}\teval acc: {eval_acc:.3f}\t'
+              f'test auc: {round(test_auc, 3)}\ttest acc: {test_acc:.3f}')
 
         torch.cuda.empty_cache()
 
