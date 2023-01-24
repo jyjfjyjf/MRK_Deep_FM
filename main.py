@@ -16,8 +16,8 @@ def train():
     dim = 8
     low_layer_nums = 1
     high_layer_nums = 1
-    kg_lr = 0.002
-    rs_lr = 0.004
+    kg_lr = 0.004
+    rs_lr = 0.008
     device = 'cuda'
 
     data = load_data()
@@ -187,19 +187,21 @@ def train():
             pred = output[0]
             pred_list.extend(pred.tolist())
             label_list.extend(score.tolist())
+
+        pred_list = torch.sigmoid(torch.tensor(pred_list)).tolist()
         test_auc = roc_auc_score(y_true=label_list, y_score=pred_list)
         predictions = [1 if i >= 0.5 else 0 for i in pred_list]
         test_acc = np.mean(np.equal(predictions, label_list))
 
-        print(f'train auc: {round(train_auc, 3)}\ttrain acc: {train_acc:.3f}\t'
-              f'eval auc: {round(eval_auc, 3)}\teval acc: {eval_acc:.3f}\t'
-              f'test auc: {round(test_auc, 3)}\ttest acc: {test_acc:.3f}')
+        print(f'train auc: {train_auc:.4f}\ttrain acc: {train_acc:.4f}\t'
+              f'eval auc: {eval_auc:.4f}\teval acc: {eval_acc:.4f}\t'
+              f'test auc: {round(test_auc, 3)}\ttest acc: {round(test_acc, 3)}')
 
         torch.cuda.empty_cache()
 
 
 def main():
-    seed = 555
+    seed = 3047
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
