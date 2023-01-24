@@ -12,20 +12,20 @@ import numpy as np
 
 def train():
     Epoch = 20
-    batch_size = 1024
+    batch_size = 4096
     dim = 8
     low_layer_nums = 1
     high_layer_nums = 1
     kg_lr = 0.01
-    rs_lr = 0.005
+    rs_lr = 0.02
     device = 'cuda'
 
     data = load_data()
     n_user, n_item, n_entity, n_relation = data[0], data[1], data[2], data[3]
     train_data, eval_data, test_data = data[4], data[5], data[6]
     kg = data[7]
-    eval_dataset = RatDataset(train_data)
-    train_dataset = RatDataset(eval_data)
+    train_dataset = RatDataset(train_data)
+    eval_dataset = RatDataset(eval_data)
     test_dataset = RatDataset(test_data)
     kg_dataset = KGDataset(kg)
 
@@ -131,8 +131,8 @@ def train():
                         flag=False
                     )
                     loss = output
-                    loss.mean().backward()
-                    total_loss += loss.mean().item()
+                    loss.sum().backward()
+                    total_loss += loss.sum().item()
 
                     pbar.set_postfix({'loss': f'{total_loss / step:.5f}'})
 

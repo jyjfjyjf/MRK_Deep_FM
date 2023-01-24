@@ -4,7 +4,7 @@ from torch import nn
 from transformers.models.bert.modeling_bert import BertModel
 
 class MLP(nn.Module):
-    def __init__(self, input_dim, output_dim, dropout=0.2, act=nn.ReLU()):
+    def __init__(self, input_dim, output_dim, dropout=0.0, act=nn.ReLU()):
         super().__init__()
         self.dropout = nn.Dropout(dropout)
         self.act = act
@@ -97,10 +97,15 @@ class MRK(nn.Module):
             score_normalized = torch.sigmoid(scores)
             if labels is not None:
                 ce_loss_fn = nn.BCEWithLogitsLoss()
-                rs_loss = ce_loss_fn(scores.view(-1, 1), labels.to(torch.float).view(-1, 1))
+                rs_loss = ce_loss_fn(scores, labels.to(torch.float))
                 rs_l2_loss = (user_embedding ** 2).sum() / 2 + (item_embeddings ** 2).sum() / 2
                 for w in self.user_mlp.get_weights() + self.cc_unit.get_weights():
                     rs_l2_loss += (w ** 2).sum() / 2
+                # for name, param in self.named_parameters():
+                #     if param.requires_grad and ('embeddings_lookup' not in name) \
+                #             and (('rs' in name) or ('cc_unit' in name) or ('user' in name)) \
+                #             and ('weight' in name):
+                #         rs_l2_loss = rs_l2_loss + (param ** 2).sum() / 2
 
                 return scores, score_normalized, rs_l2_loss * 1e-6 + rs_loss
         else:
@@ -119,6 +124,11 @@ class MRK(nn.Module):
             kg_l2_loss = (head_embedding ** 2).sum() / 2 + (tail_embedding ** 2).sum() / 2
             for w in self.tail_mlp.get_weights() + self.cc_unit.get_weights() + self.kg_mlp.get_weights() + self.kg_pred_mlp.get_weights():
                 kg_l2_loss += (w ** 2).sum() / 2
+            # for name, param in self.named_parameters():
+            #     if param.requires_grad and ('embeddings_lookup' not in name) \
+            #             and (('kge' in name) or ('tail' in name) or ('cc_unit' in name)) \
+            #             and ('weight' in name):
+            #         kg_l2_loss = kg_l2_loss + (param ** 2).sum() / 2
 
             return kg_loss + kg_l2_loss * 1e-6
             # return rmse
