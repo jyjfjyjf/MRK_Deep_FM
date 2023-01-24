@@ -24,10 +24,13 @@ class CrossCompressUnit(nn.Module):
     def __init__(self, dim):
         super().__init__()
         self.dim = dim
-        self.vv = nn.Linear(dim, 1)
-        self.ve = nn.Linear(dim, 1)
-        self.ev = nn.Linear(dim, 1)
-        self.ee = nn.Linear(dim, 1)
+        self.vv = nn.Linear(dim, 1, bias=False)
+        self.ve = nn.Linear(dim, 1, bias=False)
+        self.ev = nn.Linear(dim, 1, bias=False)
+        self.ee = nn.Linear(dim, 1, bias=False)
+
+        self.bias_v = nn.Parameter(torch.zeros(dim))
+        self.bias_e = nn.Parameter(torch.zeros(dim))
 
     def forward(self, v, e):
         v = v.unsqueeze(2)
@@ -41,7 +44,7 @@ class CrossCompressUnit(nn.Module):
 
         v_output = self.vv(c_matrix) + self.ev(c_matrix_transpose)
         e_output = self.ve(c_matrix) + self.ee(c_matrix_transpose)
-        return v_output.view(-1, self.dim), e_output.view(-1, self.dim)
+        return v_output.view(-1, self.dim) + self.bias_v, e_output.view(-1, self.dim) + self.bias_e
 
     def get_weights(self):
         return [self.vv.weight, self.ve.weight, self.ev.weight, self.ee.weight]
@@ -93,9 +96,9 @@ class MRK(nn.Module):
             scores = (user_embedding * item_embeddings).sum(1)
             score_normalized = torch.sigmoid(scores)
             if labels is not None:
-                ce_loss_fn = nn.MultiLabelSoftMarginLoss()
+                ce_loss_fn = nn.BCEWithLogitsLoss()
                 rs_loss = ce_loss_fn(scores.view(-1, 1), labels.to(torch.float).view(-1, 1))
-                rs_l2_loss = (user_embedding ** 2).sum() / 2 + (item_embedding ** 2).sum() / 2
+                rs_l2_loss = (user_embedding ** 2).sum() / 2 + (item_embeddings ** 2).sum() / 2
                 for w in self.user_mlp.get_weights() + self.cc_unit.get_weights():
                     rs_l2_loss += (w ** 2).sum() / 2
 
@@ -118,6 +121,7 @@ class MRK(nn.Module):
                 kg_l2_loss += (w ** 2).sum() / 2
 
             return kg_loss + kg_l2_loss * 1e-6
+            # return rmse
 
 
 class HighLayer(nn.Module):

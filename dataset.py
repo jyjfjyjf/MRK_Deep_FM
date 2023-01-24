@@ -3,62 +3,19 @@ import torch
 from torch.utils.data import Dataset
 from tqdm import tqdm
 
+from data_loader import load_data
+
 
 class KGDataset(Dataset, ABC):
-    def __init__(self, ):
-        id2entity_path = 'data/movie/item_index2entity_id.txt'
-        kg_path = 'data/movie/kg.txt'
-        ratings_path = 'data/movie/ratings.dat'
-
-        with open(id2entity_path, 'r', encoding='utf-8') as f:
-            entity_id2index = f.readlines()
-        self.entity_id2index = {fi.strip().split('\t')[0]: fi.strip().split('\t')[1] for fi in entity_id2index}
-        with open(kg_path, 'r', encoding='utf-8') as f:
-            kg = f.readlines()
-
-        with open(ratings_path, 'r', encoding='utf-8') as f:
-            ratings = f.readlines()
-
-        for rating in ratings:
-            if rating.split('::')[1] not in self.entity_id2index.keys():
-                self.entity_id2index[rating.split('::')[1]] = len(entity_id2index) + 1
-
-        relation_set = set()
-        for kg_ in kg:
-            kg_ = kg_.strip()
-            kg_ = kg_.split('\t')
-            relation_set.add(kg_[1])
-        self.relation2id = {rs: i for i, rs in enumerate(list(relation_set))}
-
-        self.kg = []  # (电影 id, 关系 id, 客体 id)
-        self.object = set()
-        for kg_ in tqdm(kg, desc='RatDataset'):
-            kg_ = kg_.strip()
-            kg_ = kg_.split('\t')
-
-            subject_id = kg_[0]
-            object_id = kg_[2]
-            self.object.add(subject_id)
-            self.object.add(object_id)
-
-        self.object = list(set(list(self.entity_id2index.keys()) + list(self.object)))
-        self.so2id = {v: i for i, v in enumerate(self.object)}
-        for kg_ in kg:
-            kg_ = kg_.strip()
-            kg_ = kg_.split('\t')
-            entity_id = self.so2id[kg_[0]]
-            relation_id = self.relation2id[kg_[1]]
-            object_id = self.so2id[kg_[2]]
-            self.kg.append((
-                entity_id, relation_id, object_id
-            ))
-        self.length = len(self.kg)
+    def __init__(self, data):
+        self.data = data
+        self.length = len(self.data)
 
     def __len__(self):
         return self.length
 
     def __getitem__(self, item):
-        return self.kg[item]
+        return self.data[item].tolist()
 
     @staticmethod
     def collate_fn(batch):
@@ -74,80 +31,16 @@ class KGDataset(Dataset, ABC):
 
 
 class RatDataset(Dataset, ABC):
-    def __init__(self, ):
-        id2entity_path = 'data/movie/item_index2entity_id.txt'
-        kg_path = 'data/movie/kg.txt'
-        ratings_path = 'data/movie/ratings.dat'
+    def __init__(self, data):
+        self.data = data
 
-        with open(id2entity_path, 'r', encoding='utf-8') as f:
-            entity_id2index = f.readlines()
-        self.entity_id2index = {fi.strip().split('\t')[0]: fi.strip().split('\t')[1] for fi in entity_id2index}
-        with open(kg_path, 'r', encoding='utf-8') as f:
-            kg = f.readlines()
-
-        with open(ratings_path, 'r', encoding='utf-8') as f:
-            ratings = f.readlines()
-
-        for rating in ratings:
-            if rating.split('::')[1] not in self.entity_id2index.keys():
-                self.entity_id2index[rating.split('::')[1]] = len(entity_id2index) + 1
-
-        relation_set = set()
-        for kg_ in kg:
-            kg_ = kg_.strip()
-            kg_ = kg_.split('\t')
-            relation_set.add(kg_[1])
-        self.relation2id = {rs: i for i, rs in enumerate(list(relation_set))}
-
-        self.kg = []  # (电影 id, 关系 id, 客体 id)
-        self.object = set()
-        for kg_ in tqdm(kg, desc='RatDataset'):
-            kg_ = kg_.strip()
-            kg_ = kg_.split('\t')
-            subject_id = kg_[0]
-            object_id = kg_[2]
-            self.object.add(subject_id)
-            self.object.add(object_id)
-
-        self.object = list(set(list(self.entity_id2index.keys()) + list(self.object)))
-        self.so2id = {v: i for i, v in enumerate(self.object)}
-        for kg_ in kg:
-            kg_ = kg_.strip()
-            kg_ = kg_.split('\t')
-            entity_id = self.so2id[kg_[0]]
-            relation_id = self.relation2id[kg_[1]]
-            object_id = self.so2id[kg_[2]]
-            self.kg.append((
-                entity_id, relation_id, object_id
-            ))
-
-        user_set = set()
-        for rating in ratings:
-            rating = rating.strip()
-            rating = rating.split('::')
-            user_set.add(rating[0])
-        self.user2id = {user: i for i, user in enumerate(list(user_set))}
-
-        self.ratings = []  # (user_id, entity_id, score)
-        for rating in tqdm(ratings, desc='RatDataset'):
-            rating = rating.strip()
-            rating = rating.split('::')
-            user = rating[0]
-            entity_id = self.so2id[rating[1]]
-            score = int(rating[2])
-            self.ratings.append((
-                self.user2id[user],
-                entity_id,
-                1 if score >= 5 else 0
-            ))
-
-        self.length = len(self.ratings)
+        self.length = len(self.data)
 
     def __len__(self):
         return self.length
 
     def __getitem__(self, item):
-        return self.ratings[item]
+        return self.data[item].tolist()
 
     @staticmethod
     def collate_fn(batch):
@@ -162,9 +55,12 @@ class RatDataset(Dataset, ABC):
         }
 
 
-
 def main():
-    dataset = KGDataset()
+    data = load_data()
+    n_user, n_item, n_entity, n_relation = data[0], data[1], data[2], data[3]
+    train_data, eval_data, test_data = data[4], data[5], data[6]
+    kg = data[7]
+    dataset = KGDataset(kg)
 
 
 if __name__ == '__main__':
