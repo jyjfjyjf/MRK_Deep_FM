@@ -4,7 +4,7 @@ import torch
 from torch.utils.data import DataLoader
 import random
 from torch.optim import AdamW
-from MRK import MRK
+from MKRFM import MKRFM
 from tqdm import tqdm
 from sklearn.metrics import roc_auc_score
 import numpy as np
@@ -16,8 +16,8 @@ def train():
     dim = 8
     low_layer_nums = 1
     high_layer_nums = 1
-    kg_lr = 0.004
-    rs_lr = 0.008
+    kg_lr = 0.01
+    rs_lr = 0.02
     device = 'cuda'
 
     data = load_data()
@@ -61,7 +61,7 @@ def train():
         collate_fn=kg_dataset.collate_fn
     )
 
-    model = MRK(
+    model = MKRFM(
         dim=dim,
         user_num=n_user,
         item_num=n_item,

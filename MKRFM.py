@@ -1,62 +1,17 @@
 import torch
 from torch import nn
+from DeepFM import DeepFM
+from MKR import MLP, CrossCompressUnit
 
 
-class MLP(nn.Module):
-    def __init__(self, input_dim, output_dim, dropout=0.2, act=nn.ReLU()):
-        super().__init__()
-        self.dropout = nn.Dropout(dropout)
-        self.act = act
-        self.linear = nn.Linear(input_dim, output_dim)
-
-    def forward(self, x):
-        x = self.dropout(x)
-        x = self.linear(x)
-        x = self.act(x)
-        return x
-
-    def get_weights(self):
-        return [self.linear.weight]
-
-
-class CrossCompressUnit(nn.Module):
-    def __init__(self, dim):
-        super().__init__()
-        self.dim = dim
-        self.vv = nn.Linear(dim, 1, bias=False)
-        self.ve = nn.Linear(dim, 1, bias=False)
-        self.ev = nn.Linear(dim, 1, bias=False)
-        self.ee = nn.Linear(dim, 1, bias=False)
-
-        self.bias_v = nn.Parameter(torch.zeros(dim))
-        self.bias_e = nn.Parameter(torch.zeros(dim))
-
-    def forward(self, v, e):
-        v = v.unsqueeze(2)
-        e = e.unsqueeze(1)
-
-        c_matrix = torch.bmm(v, e)
-        c_matrix_transpose = c_matrix.transpose(2, 1)
-
-        c_matrix = c_matrix.view(-1, self.dim)
-        c_matrix_transpose = c_matrix_transpose.reshape(-1, self.dim)
-
-        v_output = self.vv(c_matrix) + self.ev(c_matrix_transpose)
-        e_output = self.ve(c_matrix) + self.ee(c_matrix_transpose)
-        return v_output.view(-1, self.dim) + self.bias_v, e_output.view(-1, self.dim) + self.bias_e
-
-    def get_weights(self):
-        return [self.vv.weight, self.ve.weight, self.ev.weight, self.ee.weight]
-
-
-class MRK(nn.Module):
+class MKRFM(nn.Module):
     def __init__(self, dim, user_num, item_num, relation_num, so_num, low_layer_num, high_layer_num):
         super().__init__()
         self.dim = dim
-        self.user_embedding = nn.Embedding(user_num, dim)
-        self.item_embedding = nn.Embedding(item_num, dim)
-        self.relation_embedding = nn.Embedding(relation_num, dim)
-        self.so_embedding = nn.Embedding(so_num, dim)
+        self.user_embedding = DeepFM(cate_fea_nuniqs=[user_num])
+        self.item_embedding = DeepFM(cate_fea_nuniqs=[item_num])
+        self.relation_embedding = DeepFM(cate_fea_nuniqs=[relation_num])
+        self.so_embedding = DeepFM(cate_fea_nuniqs=[so_num])
         self.relation_num = relation_num
         self.re_classification = nn.Linear(dim, relation_num)
 
@@ -149,62 +104,3 @@ class MRK(nn.Module):
 
             return kg_loss + kg_l2_loss * 1e-3
             # return kg_loss
-
-
-class HighLayer(nn.Module):
-    def __init__(self, dim, layer_num):
-        super().__init__()
-        self.dim = dim
-        self.layer_num = layer_num
-        self.kg_mlp = MLP(2 * dim, 2 * dim)
-        self.kg_pred_mlp = MLP(2 * dim, dim)
-
-    def forward(self, head_embedding, relation_embedding, tail_embedding):
-        head_relation_concat = torch.cat([head_embedding, relation_embedding], dim=1)
-
-        kg_mlp_weight = []
-        for _ in range(self.layer_num - 1):
-            head_relation_concat = self.kg_mlp(head_relation_concat)
-            kg_mlp_weight.append(self.kg_mlp.get_weights())
-
-        tail_pred = self.kg_pred_mlp(head_relation_concat)
-        kg_mlp_weight.append(self.kg_pred_mlp.get_weights())
-        sigmoid = nn.Sigmoid()
-        tail_pred = sigmoid(tail_pred)
-
-        score_kg = sigmoid((tail_embedding * tail_pred).sum(1))
-        rmse_loss = torch.sqrt(
-            ((tail_embedding - tail_pred) ** 2).sum(1) / self.dim
-        ).mean()
-
-        return score_kg, rmse_loss
-
-    def get_weights(self):
-        return self.kg_mlp.get_weights() + self.kg_pred_mlp.get_weights()
-
-
-class LowLayer(nn.Module):
-    def __init__(self, dim, layer_num):
-        super().__init__()
-        self.user_mlp = MLP(dim, dim)
-        self.tail_mlp = MLP(dim, dim)
-        self.cc_unit = CrossCompressUnit(dim)
-        self.layer_num = layer_num
-
-    def forward(self, user_embedding, item_embedding, head_embedding, tail_embedding):
-        for _ in range(self.layer_num):
-            user_embedding = self.user_mlp(user_embedding)
-            item_embedding, head_embedding = self.cc_unit(item_embedding, head_embedding)
-            tail_embedding = self.tail_mlp(tail_embedding)
-
-        return user_embedding, item_embedding, tail_embedding
-
-    def get_rs_weights(self):
-        return self.user_mlp.get_weights() + self.cc_unit.get_weights()
-
-    def get_kg_weights(self):
-        return self.tail_mlp.get_weights() + self.cc_unit.get_weights()
-
-
-
-
