@@ -10,8 +10,8 @@ class MKRFM(nn.Module):
         self.dim = dim
         self.user_embedding = DeepFM(cate_fea_nuniqs=[user_num])
         self.item_embedding = DeepFM(cate_fea_nuniqs=[item_num])
-        self.relation_embedding = DeepFM(cate_fea_nuniqs=[relation_num])
-        self.so_embedding = DeepFM(cate_fea_nuniqs=[so_num])
+        self.relation_embedding = nn.Embedding(relation_num, dim)
+        self.so_embedding = nn.Embedding(so_num, dim)
         self.relation_num = relation_num
         self.re_classification = nn.Linear(dim, relation_num)
 
